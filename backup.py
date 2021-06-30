@@ -1,22 +1,20 @@
 # -*- coding: utf-8 -*-
-import redis as r
-
-import tempfile
-import gzip
-import shutil
-import logging
-import sys
-import dropbox
-import time
-import datetime
 import contextlib
+from datetime import datetime
+import gzip
+import logging
 import os
+import shutil
+import sys
+import tempfile
+import time
+
 import config
+import dropbox
+import redis as r
 
 redis = r.Redis()
 rdb_path = '%s/%s' % (redis.config_get('dir')['dir'], redis.config_get('dbfilename')['dbfilename'])
-rdb_path = 'dump.rdb'
-
 
 logging.basicConfig(filename='backup.log', filemode='a', format='%(asctime)s - %(levelname)s - %(message)s',level=logging.INFO if config.LOGGING else logging.CRITICAL)
 dbx = dropbox.Dropbox(config.DROPBOX_TOKEN)
@@ -56,9 +54,10 @@ def compress_file(file_path):
 def upload(file_path,compress=False):
     
     upload_path = "/redis/"
+    now = datetime.now()
     if compress:
         file = compress_file(file_path)
-        upload_path += f"backup{int(time.time())}.gz"
+        upload_path += f"backup{now.strftime("%m-%d-%Y_%H-%M-%S")}.gz"
     else:
         file = open(file_path,"rb")
         upload_path += "dump.rdb"
@@ -66,7 +65,7 @@ def upload(file_path,compress=False):
 
     try:
         file_size = os.stat(file_path).st_size
-        logging.debug(f"Uploading file {file_path} size {file_size}")
+        logging.info(f"Uploading file {file_path} size {file_size}")
         with file as f:
             
             if file_size <= MAX_CHUNK:
@@ -74,7 +73,7 @@ def upload(file_path,compress=False):
                     f.read(), upload_path, dropbox.files.WriteMode.overwrite
                 )
             else:
-                session_start = dbx.files_upload_session_start(
+                t1 = session_start = dbx.files_upload_session_start(
                     f.read(MAX_CHUNK)
                 )
                 cursor = dropbox.files.UploadSessionCursor(
@@ -86,7 +85,7 @@ def upload(file_path,compress=False):
 
                 while f.tell() < file_size:
                     if (file_size - f.tell()) <= MAX_CHUNK:
-                        dbx.files_upload_session_finish(
+                        t2 = dbx.files_upload_session_finish(
                             f.read(MAX_CHUNK),
                             cursor,
                             commit
@@ -99,7 +98,6 @@ def upload(file_path,compress=False):
                         )
                         cursor.offset = f.tell()
             
-            
         logging.info(f"File {upload_path} uploaded successfully!")
         return True
     except dropbox.exceptions.ApiError as e:
@@ -110,7 +108,7 @@ def upload(file_path,compress=False):
         logging.error(e)
     return False
 def main():
-    #if not save_redis(): return
+    if not save_redis(): return
 
     # Trying to makedir for redis backups
     try: 
@@ -118,9 +116,12 @@ def main():
         logging.info("Redis Folder created.")
     except: pass
 
-    upload(rdb_path)
-    upload(rdb_path,compress=True)
+    if config.UPDATE_RDB:
+        upload(rdb_path)
     
+    if config.ARCHIVE_RDB and not redis.get("__archive_backup__"):
+        upload(rdb_path,compress=True)
+        redis.setex("__archive_backup__",config.ARCHIVE_PERIOD,1)
 
 if __name__ == "__main__":
     main()
