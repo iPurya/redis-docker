@@ -108,6 +108,9 @@ def upload(file_path,compress=False):
         logging.error(e)
     return False
 def main():
+    if not redis.ping():
+        return logging.error("Not connected to redis-server")
+
     if not save_redis(): return
 
     # Trying to makedir for redis backups
