@@ -16,7 +16,7 @@ import redis as r
 redis = r.Redis()
 rdb_path = '%s/%s' % (redis.config_get('dir')['dir'], redis.config_get('dbfilename')['dbfilename'])
 
-logging.basicConfig(filename='backup.log', filemode='a', format='%(asctime)s - %(levelname)s - %(message)s',level=logging.INFO if config.LOGGING else logging.CRITICAL)
+logging.basicConfig(handlers = [logging.FileHandler('backup.log'), logging.StreamHandler()], format='%(asctime)s - %(levelname)s - %(message)s',level=logging.INFO if config.LOGGING else logging.CRITICAL)
 dbx = dropbox.Dropbox(config.DROPBOX_TOKEN)
 
 MAX_CHUNK = 4 * 1024 * 1024
@@ -57,7 +57,7 @@ def upload(file_path,compress=False):
     now = datetime.now()
     if compress:
         file = compress_file(file_path)
-        upload_path += f"backup{now.strftime("%m-%d-%Y_%H-%M-%S")}.gz"
+        upload_path += f"backup{now.strftime('%m-%d-%Y_%H-%M-%S')}.gz"
     else:
         file = open(file_path,"rb")
         upload_path += "dump.rdb"
