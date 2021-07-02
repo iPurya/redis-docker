@@ -1,0 +1,2 @@
+0 * * * * root /usr/bin/python3 /redis/backup.py
+# Don't remove this line
