@@ -13,16 +13,13 @@ import config
 import dropbox
 import redis as r
 
-redis = r.Redis()
-rdb_path = '%s/%s' % (redis.config_get('dir')['dir'], redis.config_get('dbfilename')['dbfilename'])
-
-logging.basicConfig(handlers = [logging.FileHandler('backup.log'), logging.StreamHandler()], format='%(asctime)s - %(levelname)s - %(message)s',level=logging.INFO if config.LOGGING else logging.CRITICAL)
-dbx = dropbox.Dropbox(config.DROPBOX_TOKEN)
+path = os.path.dirname(os.path.realpath(__file__))
+logging.basicConfig(handlers = [logging.FileHandler(path+'/backup.log'), logging.StreamHandler()], format='%(asctime)s - %(levelname)s - %(message)s',level=logging.INFO if config.LOGGING else logging.CRITICAL)
 
 MAX_CHUNK = 4 * 1024 * 1024
 TIMEOUT = 300
 
-def save_redis():
+def save_redis(redis):
 
     # Using bgsave instead save because save command blocks all other clients while saving
     start_time = time.time()
@@ -51,7 +48,7 @@ def compress_file(file_path):
     temp_file.seek(0)
     return temp_file
 
-def upload(file_path,compress=False):
+def upload(dbx, file_path,compress=False):
     
     upload_path = "/redis/"
     now = datetime.now()
@@ -108,10 +105,18 @@ def upload(file_path,compress=False):
         logging.error(e)
     return False
 def main():
-    if not redis.ping():
-        return logging.error("Not connected to redis-server")
 
-    if not save_redis(): return
+    try:
+        redis = r.Redis()
+        if not redis.ping():
+            return logging.error("Not connected to redis-server")
+    except Exception as e:
+        return logging.error(e)
+    
+    rdb_path = '%s/%s' % (redis.config_get('dir')['dir'], redis.config_get('dbfilename')['dbfilename'])
+    if not save_redis(redis): return
+
+    dbx = dropbox.Dropbox(config.DROPBOX_TOKEN)
 
     # Trying to makedir for redis backups
     try: 
@@ -120,10 +125,10 @@ def main():
     except: pass
 
     if config.UPDATE_RDB:
-        upload(rdb_path)
+        upload(dbx, rdb_path)
     
     if config.ARCHIVE_RDB and not redis.get("__archive_backup__"):
-        upload(rdb_path,compress=True)
+        upload(dbx, rdb_path,compress=True)
         redis.setex("__archive_backup__",config.ARCHIVE_PERIOD,1)
 
 if __name__ == "__main__":
