@@ -1,0 +1,12 @@
+version: "3.9"
+
+services:
+  redis-docker:
+    restart: unless-stopped
+    build: .
+    stdin_open: true
+    tty: true
+    volumes:
+        - .:/redis
+    container_name: redis
+    network_mode: host
