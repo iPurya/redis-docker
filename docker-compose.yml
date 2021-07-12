@@ -10,3 +10,8 @@ services:
         - .:/redis
     container_name: redis
     network_mode: host
+    healthcheck:
+        test: [ "CMD", "redis-cli", "ping" ]
+        interval: 1s
+        timeout: 3s
+        retries: 30
